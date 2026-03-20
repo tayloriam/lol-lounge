@@ -11,7 +11,6 @@ const queueTitle = document.getElementById("queueTitle");
 const queueMeta = document.getElementById("queueMeta");
 const slotGrid = document.getElementById("slotGrid");
 const eventFeed = document.getElementById("eventFeed");
-const leaveButton = document.getElementById("leaveButton");
 const nicknameBadge = document.getElementById("nicknameBadge");
 const nicknameDialog = document.getElementById("nicknameDialog");
 const nicknameForm = document.getElementById("nicknameForm");
@@ -54,7 +53,6 @@ function renderQueuePanel() {
     queueTitle.textContent = "파티를 선택해주세요";
     queueMeta.textContent = "";
     slotGrid.innerHTML = "";
-    leaveButton.disabled = !membership;
     return;
   }
 
@@ -72,16 +70,20 @@ function renderQueuePanel() {
   selectedQueue.slots.forEach((slot) => {
     const isMine = slot.occupant === state.nickname;
     const occupiedByOther = Boolean(slot.occupant) && !isMine;
-    const blockedByAnotherParty = membership && !isMine && membership.queue.id !== selectedQueue.id;
+    const blockedByMembership = Boolean(membership) && !isMine;
     const statusLabel = slot.lastCall ? "막판" : isMine ? "내 참석" : occupiedByOther ? "참석 완료" : "비어 있음";
     const card = document.createElement("article");
     card.className = `slot-card${isMine ? " mine" : ""}${occupiedByOther ? " full" : ""}${slot.lastCall ? " last-call" : ""}`;
 
     const button = document.createElement("button");
-    button.className = "slot-button";
-    button.textContent = isMine ? "참석됨" : "참석";
-    button.disabled = occupiedByOther || blockedByAnotherParty || !state.nickname;
+    button.className = `slot-button${isMine ? " leave-button" : ""}`;
+    button.textContent = isMine ? "파티 제외" : "참석";
+    button.disabled = occupiedByOther || blockedByMembership || !state.nickname;
     button.addEventListener("click", async () => {
+      if (isMine) {
+        await leaveQueue();
+        return;
+      }
       await joinQueue(selectedQueue.id, slot.id);
     });
 
@@ -104,8 +106,6 @@ function renderQueuePanel() {
     card.appendChild(actions);
     slotGrid.appendChild(card);
   });
-
-  leaveButton.disabled = !membership;
 }
 
 function renderEvents() {
@@ -237,7 +237,6 @@ nicknameForm.addEventListener("submit", (event) => {
 });
 
 changeNicknameButton.addEventListener("click", openNicknameDialog);
-leaveButton.addEventListener("click", leaveQueue);
 
 window.addEventListener("DOMContentLoaded", async () => {
   await fetchState();

@@ -201,6 +201,10 @@ input {
   display: grid;
   gap: 8px;
   margin-top: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
 }
 
 .queue-item {
@@ -232,7 +236,7 @@ input {
 .panel-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
 }
 
@@ -273,6 +277,8 @@ input {
 }
 
 .slot-card {
+  display: flex;
+  flex-direction: column;
   padding: 16px;
   border-radius: 18px;
   border: 1px solid var(--border);
@@ -288,6 +294,7 @@ input {
 .slot-card p {
   margin: 0 0 14px;
   color: var(--muted);
+  flex: 1 1 auto;
   min-height: 40px;
 }
 
@@ -337,11 +344,23 @@ input {
 .danger-button,
 .slot-button,
 .last-call-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: 12px;
+  border: 1px solid transparent;
+  min-height: 44px;
   padding: 11px 14px;
   cursor: pointer;
-  transition: opacity 160ms ease, transform 160ms ease;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    opacity 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .primary-button,
@@ -355,6 +374,17 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-top: auto;
+}
+
+.slot-actions > button {
+  flex: 1 1 120px;
+}
+
+.slot-button.leave-button {
+  background: var(--danger-soft);
+  border-color: rgba(198, 40, 40, 0.16);
+  color: var(--danger);
 }
 
 .last-call-button {
@@ -386,7 +416,7 @@ button:disabled {
 }
 
 button:not(:disabled):hover {
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .event-feed {
