@@ -131,7 +131,11 @@ def send_discord_notification(message: str) -> None:
     request = Request(
         DISCORD_WEBHOOK_URL,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "lol-lounge-webhook/1.0",
+        },
         method="POST",
     )
     try:
