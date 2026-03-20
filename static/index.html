@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>롤라운지</title>
+    <meta name="theme-color" content="#0f1a2a" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Asta+Sans:wght@300;400;500;700;800&display=swap"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="app-bar">
+        <div class="app-bar__brand">
+          <img class="brand-mark" src="/lol-lounge-badge.svg" alt="LO:L LOUNGE" />
+          <div>
+            <p class="eyebrow">LO:L LOUNGE</p>
+            <h1>롤라운지</h1>
+          </div>
+        </div>
+        <div class="identity">
+          <div class="identity__content">
+            <span class="label">현재 닉네임</span>
+            <strong id="nicknameBadge">미설정</strong>
+          </div>
+          <button id="changeNicknameButton" class="secondary-button">닉네임 변경</button>
+        </div>
+      </header>
+
+      <section class="hero-card">
+        <div class="hero-card__content">
+          <h2>참석 가능한 파티를 빠르게 선택하세요.</h2>
+          <p class="hero-copy">
+            닉네임을 등록한 뒤 원하는 파티에 참석할 수 있습니다. 한 번에 하나의 파티만 참석 가능하며,
+            다른 파티로 이동하려면 먼저 파티 제외를 눌러야 합니다.
+          </p>
+        </div>
+        <div class="hero-card__chips">
+          <span class="info-chip">실시간 동기화</span>
+          <span class="info-chip">단일 파티 참석 제한</span>
+        </div>
+      </section>
+
+      <main class="layout">
+        <aside class="queue-nav">
+          <div class="nav-header">
+            <div class="section-title">파티 리스트</div>
+          </div>
+          <div id="queueList" class="queue-list"></div>
+        </aside>
+
+        <section class="queue-panel">
+          <div class="panel-header">
+            <div>
+              <div class="section-title">선택된 파티</div>
+              <h2 id="queueTitle">파티를 선택해주세요</h2>
+            </div>
+            <button id="leaveButton" class="danger-button" disabled>파티 제외</button>
+          </div>
+          <div id="queueMeta" class="queue-meta"></div>
+          <div id="slotGrid" class="slot-grid"></div>
+        </section>
+
+        <aside class="feed-panel">
+          <div class="nav-header">
+            <div class="section-title">업데이트</div>
+          </div>
+          <div id="eventFeed" class="event-feed"></div>
+        </aside>
+      </main>
+    </div>
+
+    <dialog id="nicknameDialog">
+      <form id="nicknameForm" class="nickname-form" method="dialog">
+        <h3>닉네임 입력</h3>
+        <p>웹사이트 진입 시 사용할 닉네임을 입력해주세요.</p>
+        <input id="nicknameInput" name="nickname" maxlength="20" autocomplete="nickname" required />
+        <button type="submit" class="primary-button">입장하기</button>
+      </form>
+    </dialog>
+
+    <template id="emptyFeedTemplate">
+      <div class="empty-feed">아직 업데이트가 없습니다.</div>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

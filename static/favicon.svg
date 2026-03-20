@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1320"/>
+      <stop offset="1" stop-color="#1D2A3D"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0B2"/>
+      <stop offset="0.45" stop-color="#E9BA55"/>
+      <stop offset="1" stop-color="#FFE69B"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)"/>
+  <path d="M32 10L49 16L45 45L32 54L19 45L15 16L32 10Z" fill="#09111D" stroke="url(#gold)" stroke-width="2"/>
+  <text x="32" y="34" text-anchor="middle" fill="url(#gold)" font-size="16" font-weight="700" font-family="Georgia, serif">LO:L</text>
+  <text x="32" y="43" text-anchor="middle" fill="url(#gold)" font-size="4.5" font-weight="700" font-family="Georgia, serif" letter-spacing="1.2">LOUNGE</text>
+</svg>

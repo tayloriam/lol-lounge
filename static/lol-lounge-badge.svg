@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="20" y1="12" x2="136" y2="148" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08111E"/>
+      <stop offset="1" stop-color="#18263A"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="30" y1="30" x2="130" y2="130" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF3BA"/>
+      <stop offset="0.3" stop-color="#F7D66E"/>
+      <stop offset="0.65" stop-color="#D89B32"/>
+      <stop offset="1" stop-color="#FFF1A2"/>
+    </linearGradient>
+    <filter id="glow" x="-20" y="-20" width="200" height="200" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="160" height="160" rx="24" fill="url(#bg)"/>
+  <g opacity="0.95" fill="#F9DC78">
+    <circle cx="20" cy="22" r="1.2"/>
+    <circle cx="34" cy="34" r="1.4"/>
+    <circle cx="126" cy="24" r="1.5"/>
+    <circle cx="139" cy="44" r="1.1"/>
+    <circle cx="118" cy="54" r="1.7"/>
+    <circle cx="40" cy="132" r="1.3"/>
+    <circle cx="102" cy="122" r="1.5"/>
+    <circle cx="132" cy="136" r="1.1"/>
+  </g>
+
+  <path d="M80 20L126 35L116 114L80 140L44 114L34 35L80 20Z" fill="#0A1221" stroke="url(#gold)" stroke-width="4"/>
+  <path d="M52 48H108" stroke="url(#gold)" stroke-width="3" stroke-linecap="round"/>
+  <path d="M49 107H111" stroke="url(#gold)" stroke-width="3" stroke-linecap="round"/>
+  <path d="M80 18L84 26H76L80 18Z" fill="url(#gold)" filter="url(#glow)"/>
+  <circle cx="80" cy="22" r="2.4" fill="#FFF1A2" filter="url(#glow)"/>
+
+  <text x="80" y="81" text-anchor="middle" fill="url(#gold)" font-size="34" font-weight="700" font-family="Georgia, serif">LO:L</text>
+  <text x="80" y="103" text-anchor="middle" fill="url(#gold)" font-size="12" font-weight="700" font-family="Georgia, serif" letter-spacing="2">LOUNGE</text>
+
+  <path d="M27 118C34 112 42 112 48 118C40 118 33 123 29 130C29 126 28 122 27 118Z" fill="url(#gold)"/>
+  <path d="M38 120C45 115 53 115 59 122C51 121 44 126 41 133C40 129 39 125 38 120Z" fill="url(#gold)"/>
+  <path d="M49 123C56 118 63 118 69 125C62 124 56 129 53 136C52 132 51 127 49 123Z" fill="url(#gold)"/>
+  <path d="M133 118C126 112 118 112 112 118C120 118 127 123 131 130C131 126 132 122 133 118Z" fill="url(#gold)"/>
+  <path d="M122 120C115 115 107 115 101 122C109 121 116 126 119 133C120 129 121 125 122 120Z" fill="url(#gold)"/>
+  <path d="M111 123C104 118 97 118 91 125C98 124 104 129 107 136C108 132 109 127 111 123Z" fill="url(#gold)"/>
+</svg>

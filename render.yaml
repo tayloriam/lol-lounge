@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: lol-lounge
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 app.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
