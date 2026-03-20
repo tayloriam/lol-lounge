@@ -18,6 +18,16 @@ const nicknameInput = document.getElementById("nicknameInput");
 const changeNicknameButton = document.getElementById("changeNicknameButton");
 const emptyFeedTemplate = document.getElementById("emptyFeedTemplate");
 
+function formatQueueName(queue) {
+  if (queue.id.startsWith("rift-normal")) return queue.name.replace("협곡 일반", "⚔️ 협곡 일반");
+  if (queue.id === "rift-flex") return `⚔️ ${queue.name}`;
+  if (queue.id.startsWith("aram-normal")) return queue.name.replace("칼바람 일반", "❄️ 칼바람 일반");
+  if (queue.id.startsWith("aram-augment")) return queue.name.replace("칼바람 증강", "❄️ 칼바람 증강");
+  if (queue.id === "tft-normal") return `🧩 ${queue.name}`;
+  if (queue.id === "tft-double-up") return `🧩 ${queue.name}`;
+  return queue.name;
+}
+
 function getMembership() {
   for (const queue of state.queues) {
     for (const slot of queue.slots) {
@@ -36,7 +46,7 @@ function renderQueueList() {
     const filled = queue.slots.filter((slot) => slot.occupant).length;
     const button = document.createElement("button");
     button.className = `queue-item${queue.id === state.selectedQueueId ? " active" : ""}`;
-    button.innerHTML = `<strong>${queue.name}</strong><small>${filled} / ${queue.slots.length} 참석</small>`;
+    button.innerHTML = `<strong>${formatQueueName(queue)}</strong><small>${filled} / ${queue.slots.length} 참석</small>`;
     button.addEventListener("click", () => {
       state.selectedQueueId = queue.id;
       render();
@@ -56,7 +66,7 @@ function renderQueuePanel() {
     return;
   }
 
-  queueTitle.textContent = selectedQueue.name;
+  queueTitle.textContent = formatQueueName(selectedQueue);
   const filled = selectedQueue.slots.filter((slot) => slot.occupant).length;
   const lastCallCount = selectedQueue.slots.filter((slot) => slot.lastCall).length;
   queueMeta.innerHTML = `
