@@ -322,10 +322,21 @@ input {
   color: var(--danger);
 }
 
+.slot-card.last-call {
+  border-color: rgba(237, 137, 54, 0.28);
+  background: #fff5eb;
+}
+
+.slot-card.last-call .slot-status {
+  background: rgba(237, 137, 54, 0.16);
+  color: #c56a15;
+}
+
 .primary-button,
 .secondary-button,
 .danger-button,
-.slot-button {
+.slot-button,
+.last-call-button {
   border: 0;
   border-radius: 12px;
   padding: 11px 14px;
@@ -338,6 +349,24 @@ input {
   background: var(--accent);
   color: white;
   font-weight: 700;
+}
+
+.slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.last-call-button {
+  background: #fff;
+  border: 1px solid rgba(237, 137, 54, 0.34);
+  color: #c56a15;
+  font-weight: 700;
+}
+
+.last-call-button.active {
+  background: #ed8936;
+  color: white;
 }
 
 .secondary-button {

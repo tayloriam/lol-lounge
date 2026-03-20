@@ -22,7 +22,7 @@ PORT = int(os.environ.get("PORT", "8000"))
 
 
 def make_slots(prefix: str, count: int) -> list[dict]:
-    return [{"id": f"{prefix}-{index}", "label": f"{index}번", "occupant": None} for index in range(1, count + 1)]
+    return [{"id": f"{prefix}-{index}", "label": f"{index}번", "occupant": None, "lastCall": False} for index in range(1, count + 1)]
 
 
 def make_role_slots(prefix: str) -> list[dict]:
@@ -33,7 +33,7 @@ def make_role_slots(prefix: str) -> list[dict]:
         ("adc", "원딜"),
         ("support", "서폿"),
     ]
-    return [{"id": f"{prefix}-{role_id}", "label": label, "occupant": None} for role_id, label in roles]
+    return [{"id": f"{prefix}-{role_id}", "label": label, "occupant": None, "lastCall": False} for role_id, label in roles]
 
 
 def make_double_up_slots(prefix: str) -> list[dict]:
@@ -45,6 +45,7 @@ def make_double_up_slots(prefix: str) -> list[dict]:
                     "id": f"{prefix}-team-{team}-seat-{seat}",
                     "label": f"{team}팀 {seat}인",
                     "occupant": None,
+                    "lastCall": False,
                 }
             )
     return slots
@@ -86,7 +87,7 @@ def load_state() -> dict:
 
     try:
         with DATA_FILE.open("r", encoding="utf-8") as file:
-            return json.load(file)
+            return normalize_state(json.load(file))
     except json.JSONDecodeError:
         state = build_initial_state()
         save_state(state)
@@ -107,6 +108,14 @@ def find_membership(state: dict, nickname: str) -> tuple[dict | None, dict | Non
     return None, None
 
 
+def normalize_state(state: dict) -> dict:
+    for queue in state.get("queues", []):
+        for slot in queue.get("slots", []):
+            slot.setdefault("lastCall", False)
+    state.setdefault("events", [])
+    return state
+
+
 def get_queue(state: dict, queue_id: str) -> dict:
     for queue in state["queues"]:
         if queue["id"] == queue_id:
@@ -123,6 +132,11 @@ def get_slot(queue: dict, slot_id: str) -> dict:
 
 def append_event(state: dict, message: str) -> None:
     state["events"] = ([{"message": message, "time": datetime.now().strftime("%H:%M:%S")}] + state["events"])[:20]
+
+
+def format_prefixed_message(slot: dict, message: str) -> str:
+    prefix = "[막판] " if slot.get("lastCall") else ""
+    return f"{prefix}{message}"
 
 
 def send_discord_notification(message: str) -> None:
@@ -184,7 +198,8 @@ def join_queue(payload: dict) -> dict:
             raise ValueError("이미 다른 사람이 참석한 자리입니다.")
 
         slot["occupant"] = nickname
-        message = f"{nickname}님이 {queue['name']} - {slot['label']}에 참석했습니다."
+        slot["lastCall"] = False
+        message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에 참석했습니다.")
         append_event(state, message)
         save_state(state)
 
@@ -201,8 +216,31 @@ def leave_queue(payload: dict) -> dict:
         if not slot:
             raise ValueError("참석 중인 파티가 없습니다.")
 
+        message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에서 파티 제외되었습니다.")
         slot["occupant"] = None
-        message = f"{nickname}님이 {queue['name']} - {slot['label']}에서 파티 제외되었습니다."
+        slot["lastCall"] = False
+        append_event(state, message)
+        save_state(state)
+
+    send_discord_notification(message)
+    return state
+
+
+def update_last_call(payload: dict) -> dict:
+    nickname = normalize_nickname(payload.get("nickname", ""))
+    enabled = bool(payload.get("enabled"))
+
+    with LOCK:
+        state = load_state()
+        queue, slot = find_membership(state, nickname)
+        if not slot:
+            raise ValueError("참석 중인 자리에서만 막판 설정이 가능합니다.")
+
+        slot["lastCall"] = enabled
+        if enabled:
+            message = f"[막판] {nickname}님이 {queue['name']} - {slot['label']}에서 막판입니다."
+        else:
+            message = f"[막판 해제] {nickname}님이 {queue['name']} - {slot['label']}에서 막판을 해제했습니다."
         append_event(state, message)
         save_state(state)
 
@@ -228,7 +266,7 @@ class PartyHandler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self) -> None:
-        if self.path not in {"/api/join", "/api/leave"}:
+        if self.path not in {"/api/join", "/api/leave", "/api/last-call"}:
             self.respond_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
             return
 
@@ -239,6 +277,8 @@ class PartyHandler(SimpleHTTPRequestHandler):
         try:
             if self.path == "/api/join":
                 state = join_queue(payload)
+            elif self.path == "/api/last-call":
+                state = update_last_call(payload)
             else:
                 state = leave_queue(payload)
         except ValueError as error:

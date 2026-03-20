@@ -60,9 +60,11 @@ function renderQueuePanel() {
 
   queueTitle.textContent = selectedQueue.name;
   const filled = selectedQueue.slots.filter((slot) => slot.occupant).length;
+  const lastCallCount = selectedQueue.slots.filter((slot) => slot.lastCall).length;
   queueMeta.innerHTML = `
     <span class="meta-chip">정원 ${filled} / ${selectedQueue.slots.length}</span>
     <span class="meta-chip">마지막 업데이트 ${state.updatedAt || "-"}</span>
+    <span class="meta-chip">막판 ${lastCallCount}명</span>
     <span class="meta-chip">${membership && membership.queue.id === selectedQueue.id ? "내가 참석 중인 파티" : "참석 가능 파티"}</span>
   `;
   slotGrid.innerHTML = "";
@@ -71,9 +73,9 @@ function renderQueuePanel() {
     const isMine = slot.occupant === state.nickname;
     const occupiedByOther = Boolean(slot.occupant) && !isMine;
     const blockedByAnotherParty = membership && !isMine && membership.queue.id !== selectedQueue.id;
-    const statusLabel = isMine ? "내 참석" : occupiedByOther ? "참석 완료" : "비어 있음";
+    const statusLabel = slot.lastCall ? "막판" : isMine ? "내 참석" : occupiedByOther ? "참석 완료" : "비어 있음";
     const card = document.createElement("article");
-    card.className = `slot-card${isMine ? " mine" : ""}${occupiedByOther ? " full" : ""}`;
+    card.className = `slot-card${isMine ? " mine" : ""}${occupiedByOther ? " full" : ""}${slot.lastCall ? " last-call" : ""}`;
 
     const button = document.createElement("button");
     button.className = "slot-button";
@@ -83,9 +85,23 @@ function renderQueuePanel() {
       await joinQueue(selectedQueue.id, slot.id);
     });
 
+    const actions = document.createElement("div");
+    actions.className = "slot-actions";
+    actions.appendChild(button);
+
+    if (isMine) {
+      const lastCallButton = document.createElement("button");
+      lastCallButton.className = `last-call-button${slot.lastCall ? " active" : ""}`;
+      lastCallButton.textContent = slot.lastCall ? "막판 해제" : "막판";
+      lastCallButton.addEventListener("click", async () => {
+        await updateLastCall(!slot.lastCall);
+      });
+      actions.appendChild(lastCallButton);
+    }
+
     const name = slot.occupant || "비어 있음";
     card.innerHTML = `<span class="slot-status">${statusLabel}</span><h3>${slot.label}</h3><p>${name}</p>`;
-    card.appendChild(button);
+    card.appendChild(actions);
     slotGrid.appendChild(card);
   });
 
@@ -160,6 +176,26 @@ async function leaveQueue() {
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "파티 제외에 실패했습니다.");
+    }
+    state.queues = data.queues;
+    state.events = data.events || [];
+    state.updatedAt = data.updatedAt;
+    render();
+  } catch (error) {
+    flash(error.message);
+  }
+}
+
+async function updateLastCall(enabled) {
+  try {
+    const response = await fetch("/api/last-call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname: state.nickname, enabled }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "막판 설정 변경에 실패했습니다.");
     }
     state.queues = data.queues;
     state.events = data.events || [];
