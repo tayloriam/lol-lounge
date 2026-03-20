@@ -7,6 +7,8 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import sys
+from urllib.error import HTTPError
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -125,6 +127,7 @@ def append_event(state: dict, message: str) -> None:
 
 def send_discord_notification(message: str) -> None:
     if not DISCORD_WEBHOOK_URL:
+        print("[discord] webhook url not configured", file=sys.stderr, flush=True)
         return
 
     body = json.dumps({"content": message}).encode("utf-8")
@@ -134,14 +137,32 @@ def send_discord_notification(message: str) -> None:
         headers={
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "lol-lounge-webhook/1.0",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/123.0.0.0 Safari/537.36"
+            ),
         },
         method="POST",
     )
     try:
-        with urlopen(request, timeout=5):
+        with urlopen(request, timeout=10) as response:
+            print(f"[discord] delivered status={response.status} message={message}", flush=True)
             return
+    except HTTPError as error:
+        details = ""
+        try:
+            details = error.read().decode("utf-8", errors="replace")
+        except Exception:
+            details = "<no-body>"
+        print(
+            f"[discord] http error status={error.code} message={message} details={details}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
     except URLError:
+        print(f"[discord] network error message={message}", file=sys.stderr, flush=True)
         return
 
 
