@@ -139,6 +139,35 @@ def format_prefixed_message(slot: dict, message: str) -> str:
     return f"{prefix}{message}"
 
 
+def format_queue_name(queue: dict) -> str:
+    queue_id = queue["id"]
+    queue_name = queue["name"]
+
+    if queue_id.startswith("rift-normal"):
+        return queue_name.replace("협곡 일반", "⚔️ 협곡 일반")
+    if queue_id == "rift-flex":
+        return f"⚔️ {queue_name}"
+    if queue_id.startswith("aram-normal"):
+        return queue_name.replace("칼바람 일반", "❄️ 칼바람 일반")
+    if queue_id.startswith("aram-augment"):
+        return queue_name.replace("칼바람 증강", "❄️ 칼바람 증강")
+    if queue_id in {"tft-normal", "tft-double-up"}:
+        return f"🧩 {queue_name}"
+    return queue_name
+
+
+def build_discord_message(title: str, icon: str, nickname: str, queue: dict, slot: dict, status_text: str) -> str:
+    lines = [
+        f"{icon} **{title}**",
+        f"> 닉네임: **{nickname}**",
+        f"> 파티: **{format_queue_name(queue)}**",
+        f"> 자리: **{slot['label']}**",
+        f"> 상태: {status_text}",
+        f"> 시간: `{datetime.now().strftime('%H:%M:%S')}`",
+    ]
+    return "\n".join(lines)
+
+
 def send_discord_notification(message: str) -> None:
     if not DISCORD_WEBHOOK_URL:
         print("[discord] webhook url not configured", file=sys.stderr, flush=True)
@@ -200,10 +229,11 @@ def join_queue(payload: dict) -> dict:
         slot["occupant"] = nickname
         slot["lastCall"] = False
         message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에 참석했습니다.")
+        discord_message = build_discord_message("파티 참석", "✅", nickname, queue, slot, "참석 완료")
         append_event(state, message)
         save_state(state)
 
-    send_discord_notification(message)
+    send_discord_notification(discord_message)
     return state
 
 
@@ -216,13 +246,15 @@ def leave_queue(payload: dict) -> dict:
         if not slot:
             raise ValueError("참석 중인 파티가 없습니다.")
 
+        status_text = "막판 상태에서 파티 제외" if slot.get("lastCall") else "파티 제외"
         message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에서 파티 제외되었습니다.")
+        discord_message = build_discord_message("파티 제외", "↩️", nickname, queue, slot, status_text)
         slot["occupant"] = None
         slot["lastCall"] = False
         append_event(state, message)
         save_state(state)
 
-    send_discord_notification(message)
+    send_discord_notification(discord_message)
     return state
 
 
@@ -239,12 +271,14 @@ def update_last_call(payload: dict) -> dict:
         slot["lastCall"] = enabled
         if enabled:
             message = f"[막판] {nickname}님이 {queue['name']} - {slot['label']}에서 막판입니다."
+            discord_message = build_discord_message("막판 요청", "🔥", nickname, queue, slot, "막판 멤버를 찾고 있어요")
         else:
             message = f"[막판 해제] {nickname}님이 {queue['name']} - {slot['label']}에서 막판을 해제했습니다."
+            discord_message = build_discord_message("막판 해제", "🧊", nickname, queue, slot, "막판 상태를 해제했어요")
         append_event(state, message)
         save_state(state)
 
-    send_discord_notification(message)
+    send_discord_notification(discord_message)
     return state
 
 
