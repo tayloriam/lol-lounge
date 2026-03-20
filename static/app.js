@@ -60,10 +60,10 @@ function renderQueuePanel() {
   const filled = selectedQueue.slots.filter((slot) => slot.occupant).length;
   const lastCallCount = selectedQueue.slots.filter((slot) => slot.lastCall).length;
   queueMeta.innerHTML = `
-    <span class="meta-chip">정원 ${filled} / ${selectedQueue.slots.length}</span>
-    <span class="meta-chip">마지막 업데이트 ${state.updatedAt || "-"}</span>
-    <span class="meta-chip">막판 ${lastCallCount}명</span>
     <span class="meta-chip">${membership && membership.queue.id === selectedQueue.id ? "내가 참석 중인 파티" : "참석 가능 파티"}</span>
+    <span class="meta-chip">정원 ${filled} / ${selectedQueue.slots.length}</span>
+    <span class="meta-chip">막판 ${lastCallCount}명</span>
+    <span class="meta-chip">마지막 업데이트 ${state.updatedAt || "-"}</span>
   `;
   slotGrid.innerHTML = "";
 

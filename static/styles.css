@@ -185,8 +185,8 @@ input {
   background: var(--surface);
   box-shadow: var(--shadow-md);
   padding: 22px;
-  height: var(--panel-height);
-  min-height: 0;
+  min-height: var(--panel-height);
+  height: auto;
   overflow: hidden;
 }
 
@@ -201,10 +201,7 @@ input {
   display: grid;
   gap: 8px;
   margin-top: 16px;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 6px;
+  overflow: visible;
 }
 
 .queue-item {
@@ -502,6 +499,7 @@ dialog::backdrop {
   .queue-nav,
   .queue-panel,
   .feed-panel {
+    min-height: 0;
     height: auto;
   }
 
