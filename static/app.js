@@ -145,9 +145,9 @@ function buildSlotCard(selectedQueue, slot, membership) {
   return card;
 }
 
-function buildSlotSection(title, slots, selectedQueue, membership, extraClass = "") {
+function buildSlotSection(title, slots, selectedQueue, membership, extraClass = "", sectionClass = "") {
   const section = document.createElement("section");
-  section.className = "slot-section";
+  section.className = `slot-section ${sectionClass}`.trim();
 
   const header = document.createElement("div");
   header.className = "slot-section__header";
@@ -190,8 +190,8 @@ function renderQueuePanel() {
     <span class="meta-chip">마지막 업데이트 ${state.updatedAt || "-"}</span>
   `;
   slotGrid.innerHTML = "";
-  slotGrid.appendChild(buildSlotSection("참석 인원", mainSlots, selectedQueue, membership, "slot-grid--party"));
-  slotGrid.appendChild(buildSlotSection("대기열", waitlistSlots, selectedQueue, membership, "slot-grid--waitlist"));
+  slotGrid.appendChild(buildSlotSection("참석 인원", mainSlots, selectedQueue, membership, "slot-grid--party", "slot-section--party"));
+  slotGrid.appendChild(buildSlotSection("대기열", waitlistSlots, selectedQueue, membership, "slot-grid--waitlist", "slot-section--waitlist"));
 }
 
 function renderEvents() {
