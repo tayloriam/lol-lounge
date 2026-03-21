@@ -131,6 +131,38 @@ def is_wait_slot(slot: dict) -> bool:
     return "-wait-" in slot["id"]
 
 
+def normalize_event_entry(event: dict | str) -> dict:
+    if isinstance(event, str):
+        message = event
+        return {
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "title": "업데이트",
+            "tone": "info",
+            "lines": [message],
+            "message": message,
+        }
+
+    time = event.get("time") or datetime.now().strftime("%H:%M:%S")
+    title = event.get("title") or "업데이트"
+    tone = event.get("tone") or "info"
+    lines = event.get("lines")
+    message = event.get("message") or ""
+
+    if not isinstance(lines, list) or not lines:
+        lines = [message] if message else []
+
+    if not message:
+        message = " ".join(lines)
+
+    return {
+        "time": time,
+        "title": title,
+        "tone": tone,
+        "lines": lines,
+        "message": message,
+    }
+
+
 def normalize_state(state: dict) -> dict:
     for queue in state.get("queues", []):
         for slot in queue.get("slots", []):
@@ -138,7 +170,7 @@ def normalize_state(state: dict) -> dict:
         queue.setdefault("waitlist", make_wait_slots(queue["id"]))
         for slot in queue.get("waitlist", []):
             slot.setdefault("lastCall", False)
-    state.setdefault("events", [])
+    state["events"] = [normalize_event_entry(event) for event in state.get("events", [])]
     return state
 
 
@@ -157,7 +189,11 @@ def get_slot(queue: dict, slot_id: str) -> dict:
 
 
 def append_event(state: dict, message: str) -> None:
-    state["events"] = ([{"message": message, "time": datetime.now().strftime("%H:%M:%S")}] + state["events"])[:20]
+    state["events"] = ([normalize_event_entry({"message": message})] + state["events"])[:20]
+
+
+def append_structured_event(state: dict, event: dict) -> None:
+    state["events"] = ([normalize_event_entry(event)] + state["events"])[:20]
 
 
 def format_prefixed_message(slot: dict, message: str) -> str:
@@ -205,6 +241,41 @@ def build_actor_discord_message(title: str, icon: str, actor_nickname: str, targ
         f"> 시간: `{datetime.now().strftime('%H:%M:%S')}`",
     ]
     return "\n".join(lines)
+
+
+def build_event_entry(
+    title: str,
+    icon: str,
+    queue: dict,
+    slot: dict,
+    status_text: str,
+    *,
+    tone: str = "info",
+    nickname: str | None = None,
+    actor_nickname: str | None = None,
+    target_nickname: str | None = None,
+) -> dict:
+    lines: list[str] = []
+    if nickname:
+        lines.append(f"닉네임: {nickname}")
+    if target_nickname:
+        lines.append(f"대상: {target_nickname}")
+    if actor_nickname:
+        lines.append(f"처리자: {actor_nickname}")
+    lines.extend(
+        [
+            f"파티: {format_queue_name(queue)}",
+            f"자리: {slot['label']}",
+            f"상태: {status_text}",
+        ]
+    )
+    return {
+        "title": f"{icon} {title}",
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "tone": tone,
+        "lines": lines,
+        "message": " ".join(lines),
+    }
 
 
 def send_discord_notification(message: str) -> None:
@@ -283,8 +354,14 @@ def send_discord_bot_notification(message: str) -> None:
             details = error.read().decode("utf-8", errors="replace")
         except Exception:
             details = "<no-body>"
+        hint = ""
+        if error.code == 403:
+            hint = (
+                " hint=verify the bot is guild-installed and has View Channels / Send Messages "
+                "permission for the configured channel"
+            )
         print(
-            f"[discord-bot] http error status={error.code} message={message} details={details}",
+            f"[discord-bot] http error status={error.code} message={message} details={details}{hint}",
             file=sys.stderr,
             flush=True,
         )
@@ -316,10 +393,12 @@ def join_queue(payload: dict) -> dict:
         if is_wait_slot(slot):
             message = f"{nickname}님이 {queue['name']} - {slot['label']}에 등록되었습니다."
             discord_message = build_discord_message("대기 등록", "🕒", nickname, queue, slot, "대기열 등록 완료")
+            event = build_event_entry("대기 등록", "🕒", queue, slot, "대기열 등록 완료", tone="wait", nickname=nickname)
         else:
             message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에 참석했습니다.")
             discord_message = build_discord_message("파티 참석", "✅", nickname, queue, slot, "참석 완료")
-        append_event(state, message)
+            event = build_event_entry("파티 참석", "✅", queue, slot, "참석 완료", tone="success", nickname=nickname)
+        append_structured_event(state, event)
         save_state(state)
 
     send_discord_notification(discord_message)
@@ -339,13 +418,15 @@ def leave_queue(payload: dict) -> dict:
             status_text = "대기열에서 제거됨"
             message = f"{nickname}님이 {queue['name']} - {slot['label']}에서 대기 취소되었습니다."
             discord_message = build_discord_message("대기 취소", "↩️", nickname, queue, slot, status_text)
+            event = build_event_entry("대기 취소", "↩️", queue, slot, status_text, tone="muted", nickname=nickname)
         else:
             status_text = "막판 상태에서 파티 제외" if slot.get("lastCall") else "파티 제외"
             message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에서 파티 제외되었습니다.")
             discord_message = build_discord_message("파티 제외", "↩️", nickname, queue, slot, status_text)
+            event = build_event_entry("파티 제외", "↩️", queue, slot, status_text, tone="danger", nickname=nickname)
         slot["occupant"] = None
         slot["lastCall"] = False
-        append_event(state, message)
+        append_structured_event(state, event)
         save_state(state)
 
     send_discord_notification(discord_message)
@@ -368,10 +449,12 @@ def update_last_call(payload: dict) -> dict:
         if enabled:
             message = f"[막판] {nickname}님이 {queue['name']} - {slot['label']}에서 막판입니다."
             discord_message = build_discord_message("막판 요청", "🔥", nickname, queue, slot, "막판 멤버를 찾고 있어요")
+            event = build_event_entry("막판 요청", "🔥", queue, slot, "막판 멤버를 찾고 있어요", tone="warning", nickname=nickname)
         else:
             message = f"[막판 해제] {nickname}님이 {queue['name']} - {slot['label']}에서 막판을 해제했습니다."
             discord_message = build_discord_message("막판 해제", "🧊", nickname, queue, slot, "막판 상태를 해제했어요")
-        append_event(state, message)
+            event = build_event_entry("막판 해제", "🧊", queue, slot, "막판 상태를 해제했어요", tone="info", nickname=nickname)
+        append_structured_event(state, event)
         save_state(state)
 
     send_discord_notification(discord_message)
@@ -392,10 +475,12 @@ def remove_queue_member(payload: dict) -> dict:
             if is_wait_slot(slot):
                 message = f"{target_nickname}님이 {queue['name']} - {slot['label']}에서 대기 취소되었습니다."
                 discord_message = build_discord_message("대기 취소", "↩️", target_nickname, queue, slot, "대기열에서 제거됨")
+                event = build_event_entry("대기 취소", "↩️", queue, slot, "대기열에서 제거됨", tone="muted", nickname=target_nickname)
             else:
                 status_text = "막판 상태에서 파티 제외" if slot.get("lastCall") else "파티 제외"
                 message = format_prefixed_message(slot, f"{target_nickname}님이 {queue['name']} - {slot['label']}에서 파티 제외되었습니다.")
                 discord_message = build_discord_message("파티 제외", "↩️", target_nickname, queue, slot, status_text)
+                event = build_event_entry("파티 제외", "↩️", queue, slot, status_text, tone="danger", nickname=target_nickname)
         else:
             if is_wait_slot(slot):
                 message = f"{actor_nickname}님이 {target_nickname}님을 {queue['name']} - {slot['label']}에서 대기 취소시켰습니다."
@@ -407,6 +492,16 @@ def remove_queue_member(payload: dict) -> dict:
                     queue,
                     slot,
                     "다른 사용자가 대기열에서 제거했어요",
+                )
+                event = build_event_entry(
+                    "대기 취소 처리",
+                    "🧹",
+                    queue,
+                    slot,
+                    "다른 사용자가 대기열에서 제거했어요",
+                    tone="muted",
+                    actor_nickname=actor_nickname,
+                    target_nickname=target_nickname,
                 )
             else:
                 message = format_prefixed_message(slot, f"{actor_nickname}님이 {target_nickname}님을 {queue['name']} - {slot['label']}에서 파티 제외시켰습니다.")
@@ -422,10 +517,20 @@ def remove_queue_member(payload: dict) -> dict:
                     slot,
                     status_text,
                 )
+                event = build_event_entry(
+                    "파티 제외 처리",
+                    "🧹",
+                    queue,
+                    slot,
+                    status_text,
+                    tone="danger",
+                    actor_nickname=actor_nickname,
+                    target_nickname=target_nickname,
+                )
 
         slot["occupant"] = None
         slot["lastCall"] = False
-        append_event(state, message)
+        append_structured_event(state, event)
         save_state(state)
 
     send_discord_notification(discord_message)

@@ -145,6 +145,15 @@ function buildSlotCard(selectedQueue, slot, membership) {
   return card;
 }
 
+function buildSlotGrid(slots, selectedQueue, membership, extraClass = "") {
+  const grid = document.createElement("div");
+  grid.className = `slot-grid ${extraClass}`.trim();
+  slots.forEach((slot) => {
+    grid.appendChild(buildSlotCard(selectedQueue, slot, membership));
+  });
+  return grid;
+}
+
 function buildSlotSection(title, slots, selectedQueue, membership, extraClass = "", sectionClass = "") {
   const section = document.createElement("section");
   section.className = `slot-section ${sectionClass}`.trim();
@@ -156,11 +165,7 @@ function buildSlotSection(title, slots, selectedQueue, membership, extraClass = 
     <span class="slot-section__meta">${countOccupied(slots)} / ${slots.length}명</span>
   `;
 
-  const grid = document.createElement("div");
-  grid.className = `slot-grid ${extraClass} slot-grid--count-${slots.length}`.trim();
-  slots.forEach((slot) => {
-    grid.appendChild(buildSlotCard(selectedQueue, slot, membership));
-  });
+  const grid = buildSlotGrid(slots, selectedQueue, membership, extraClass);
 
   section.appendChild(header);
   section.appendChild(grid);
@@ -190,7 +195,7 @@ function renderQueuePanel() {
     <span class="meta-chip">마지막 업데이트 ${state.updatedAt || "-"}</span>
   `;
   slotGrid.innerHTML = "";
-  slotGrid.appendChild(buildSlotSection("참석 인원", mainSlots, selectedQueue, membership, "slot-grid--party", "slot-section--party"));
+  slotGrid.appendChild(buildSlotGrid(mainSlots, selectedQueue, membership, "slot-grid--party"));
   slotGrid.appendChild(buildSlotSection("대기열", waitlistSlots, selectedQueue, membership, "slot-grid--waitlist", "slot-section--waitlist"));
 }
 
@@ -202,9 +207,18 @@ function renderEvents() {
   }
 
   state.events.forEach((event) => {
+    const title = event.title || "업데이트";
+    const lines = Array.isArray(event.lines) && event.lines.length ? event.lines : [event.message || ""];
+    const tone = event.tone || "info";
     const item = document.createElement("div");
-    item.className = "event-item";
-    item.innerHTML = `<time>${event.time}</time><div>${event.message}</div>`;
+    item.className = `event-item event-item--${tone}`;
+    item.innerHTML = `
+      <time>${event.time}</time>
+      <strong class="event-item__title">${title}</strong>
+      <div class="event-item__body">
+        ${lines.map((line) => `<div class="event-line">${line}</div>`).join("")}
+      </div>
+    `;
     eventFeed.appendChild(item);
   });
 }

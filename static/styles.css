@@ -264,7 +264,7 @@ input {
 
 .slot-board {
   display: grid;
-  gap: 28px;
+  gap: 22px;
   margin-top: 24px;
 }
 
@@ -302,24 +302,23 @@ input {
 
 .slot-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 18px;
   align-content: start;
   overflow: visible;
 }
 
 .slot-grid--party {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(1, minmax(0, 1fr));
 }
 
 .slot-grid--waitlist {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(1, minmax(0, 1fr));
 }
 
 .slot-card {
   display: flex;
   flex-direction: column;
-  min-height: 220px;
+  min-height: 206px;
   padding: 16px;
   border-radius: 18px;
   border: 1px solid var(--border);
@@ -496,11 +495,55 @@ button:not(:disabled):hover {
   border: 1px solid var(--border);
 }
 
+.event-item {
+  display: grid;
+  gap: 8px;
+}
+
 .event-item time {
   display: block;
   color: var(--accent);
   font-size: 0.82rem;
-  margin-bottom: 6px;
+}
+
+.event-item__title {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.event-item__body {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.event-line {
+  line-height: 1.4;
+}
+
+.event-item--success {
+  border-color: rgba(30, 142, 90, 0.18);
+  background: linear-gradient(180deg, rgba(242, 251, 246, 0.96), rgba(255, 255, 255, 0.96));
+}
+
+.event-item--danger {
+  border-color: rgba(198, 40, 40, 0.18);
+  background: linear-gradient(180deg, rgba(255, 245, 245, 0.96), rgba(255, 255, 255, 0.96));
+}
+
+.event-item--warning {
+  border-color: rgba(237, 137, 54, 0.22);
+  background: linear-gradient(180deg, rgba(255, 248, 239, 0.96), rgba(255, 255, 255, 0.96));
+}
+
+.event-item--wait {
+  border-color: rgba(24, 103, 192, 0.2);
+  background: linear-gradient(180deg, rgba(244, 249, 255, 0.96), rgba(255, 255, 255, 0.96));
+}
+
+.event-item--muted {
+  border-color: rgba(97, 113, 142, 0.18);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.96));
 }
 
 dialog {
@@ -573,18 +616,19 @@ dialog::backdrop {
     justify-content: flex-start;
     min-width: 0;
   }
+
+  .slot-grid--party,
+  .slot-grid--waitlist {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-@media (min-width: 1280px) {
-  .slot-grid--count-5 {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .slot-grid--count-8 {
+@media (min-width: 1101px) {
+  .slot-grid--party {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .slot-grid--waitlist.slot-grid--count-2 {
+  .slot-grid--waitlist {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -606,5 +650,10 @@ dialog::backdrop {
   .identity {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .slot-grid--party,
+  .slot-grid--waitlist {
+    grid-template-columns: 1fr;
   }
 }
