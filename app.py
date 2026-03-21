@@ -441,11 +441,6 @@ def send_discord_bot_notification(message: str) -> None:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/123.0.0.0 Safari/537.36"
-            ),
         },
         method="POST",
     )
