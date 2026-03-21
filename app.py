@@ -30,6 +30,8 @@ NOTIFICATION_WORKER_LOCK = threading.Lock()
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
 DISCORD_CHANNEL_ID = os.environ.get("DISCORD_CHANNEL_ID", "").strip()
+DISCORD_RELAY_URL = os.environ.get("DISCORD_RELAY_URL", "").strip()
+DISCORD_RELAY_SECRET = os.environ.get("DISCORD_RELAY_SECRET", "").strip()
 PORT = int(os.environ.get("PORT", "8000"))
 DISCORD_NOTIFIER = None
 NOTIFICATION_QUEUE: queue.Queue[dict[str, object]] = queue.Queue()
@@ -404,7 +406,7 @@ def get_discord_notifier() -> DiscordBotNotifier | None:
 def start_notification_worker() -> None:
     global NOTIFICATION_WORKER
 
-    if not (DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID) and not DISCORD_WEBHOOK_URL:
+    if not DISCORD_RELAY_URL and not (DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID) and not DISCORD_WEBHOOK_URL:
         return
 
     with NOTIFICATION_WORKER_LOCK:
@@ -449,6 +451,9 @@ def run_notification_worker() -> None:
 
 
 def deliver_discord_notification(message: str) -> tuple[bool, float | None]:
+    if DISCORD_RELAY_URL:
+        return send_discord_relay_notification(message)
+
     notifier = get_discord_notifier()
     if notifier and notifier.send(message):
         return True, None
@@ -464,12 +469,49 @@ def deliver_discord_notification(message: str) -> tuple[bool, float | None]:
 
 
 def send_discord_notification(message: str) -> None:
-    if not (DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID) and not DISCORD_WEBHOOK_URL:
+    if not DISCORD_RELAY_URL and not (DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID) and not DISCORD_WEBHOOK_URL:
         print("[discord] notification target not configured", file=sys.stderr, flush=True)
         return
 
     start_notification_worker()
     NOTIFICATION_QUEUE.put({"message": message, "attempt": 1})
+
+
+def send_discord_relay_notification(message: str) -> tuple[bool, float | None]:
+    body = json.dumps({"content": message}).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if DISCORD_RELAY_SECRET:
+        headers["X-Relay-Secret"] = DISCORD_RELAY_SECRET
+
+    request = Request(
+        DISCORD_RELAY_URL,
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            print(f"[relay] delivered status={response.status} message={message}", flush=True)
+            return True, None
+    except HTTPError as error:
+        details = ""
+        try:
+            details = error.read().decode("utf-8", errors="replace")
+        except Exception:
+            details = "<no-body>"
+        retry_after = parse_retry_after(details) if error.code == 429 else None
+        print(
+            f"[relay] http error status={error.code} message={message} details={details}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return False, retry_after
+    except URLError as error:
+        print(f"[relay] network error message={message} error={error}", file=sys.stderr, flush=True)
+        return False, None
 
 
 def send_discord_webhook_notification(message: str) -> tuple[bool, float | None]:
