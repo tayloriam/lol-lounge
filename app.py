@@ -6,7 +6,7 @@ import os
 import queue
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,6 +14,7 @@ import sys
 from urllib.error import HTTPError
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 try:
     import discord
@@ -36,6 +37,19 @@ PORT = int(os.environ.get("PORT", "8000"))
 DISCORD_NOTIFIER = None
 NOTIFICATION_QUEUE: queue.Queue[dict[str, object]] = queue.Queue()
 NOTIFICATION_WORKER = None
+SEOUL_TZ = ZoneInfo("Asia/Seoul") if ZoneInfo else timezone(timedelta(hours=9))
+
+
+def now_seoul() -> datetime:
+    return datetime.now(SEOUL_TZ)
+
+
+def format_event_time() -> str:
+    return now_seoul().strftime("%H:%M:%S")
+
+
+def format_updated_at() -> str:
+    return now_seoul().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def make_slots(prefix: str, count: int) -> list[dict]:
@@ -95,7 +109,7 @@ def build_initial_state() -> dict:
     ]
     return {
         "queues": queues,
-        "updatedAt": datetime.now().isoformat(timespec="seconds"),
+        "updatedAt": format_updated_at(),
         "events": [],
     }
 
@@ -125,7 +139,7 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
-    state["updatedAt"] = datetime.now().isoformat(timespec="seconds")
+    state["updatedAt"] = format_updated_at()
     with DATA_FILE.open("w", encoding="utf-8") as file:
         json.dump(state, file, ensure_ascii=False, indent=2)
 
@@ -150,14 +164,14 @@ def normalize_event_entry(event: dict | str) -> dict:
     if isinstance(event, str):
         message = event
         return {
-            "time": datetime.now().strftime("%H:%M:%S"),
+            "time": format_event_time(),
             "title": "업데이트",
             "tone": "info",
             "lines": [message],
             "message": message,
         }
 
-    time = event.get("time") or datetime.now().strftime("%H:%M:%S")
+    time = event.get("time") or format_event_time()
     title = event.get("title") or "업데이트"
     tone = event.get("tone") or "info"
     lines = event.get("lines")
@@ -255,7 +269,7 @@ def build_discord_message(title: str, icon: str, nickname: str, queue: dict, slo
         f"> 파티: **{format_queue_name(queue)}**",
         f"> 자리: **{slot['label']}**",
         f"> 상태: {status_text}",
-        f"> 시간: `{datetime.now().strftime('%H:%M:%S')}`",
+        f"> 시간: `{format_event_time()}`",
     ]
     return "\n".join(lines)
 
@@ -268,7 +282,7 @@ def build_actor_discord_message(title: str, icon: str, actor_nickname: str, targ
         f"> 파티: **{format_queue_name(queue)}**",
         f"> 자리: **{slot['label']}**",
         f"> 상태: {status_text}",
-        f"> 시간: `{datetime.now().strftime('%H:%M:%S')}`",
+        f"> 시간: `{format_event_time()}`",
     ]
     return "\n".join(lines)
 
@@ -301,7 +315,7 @@ def build_event_entry(
     )
     return {
         "title": f"{icon} {title}",
-        "time": datetime.now().strftime("%H:%M:%S"),
+        "time": format_event_time(),
         "tone": tone,
         "lines": lines,
         "message": " ".join(lines),

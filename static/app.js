@@ -18,6 +18,28 @@ const nicknameInput = document.getElementById("nicknameInput");
 const changeNicknameButton = document.getElementById("changeNicknameButton");
 const emptyFeedTemplate = document.getElementById("emptyFeedTemplate");
 
+function formatUpdatedAt(value) {
+  if (!value) return "-";
+
+  if (value.includes("T")) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat("ko-KR", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }).format(parsed).replace(/\.\s/g, "-").replace(".", "").trim();
+    }
+  }
+
+  return value;
+}
+
 function formatQueueName(queue) {
   if (queue.id.startsWith("rift-normal")) return queue.name.replace("협곡 일반", "⚔️ 협곡 일반");
   if (queue.id === "rift-flex") return `⚔️ ${queue.name}`;
@@ -192,7 +214,7 @@ function renderQueuePanel() {
     <span class="meta-chip">${getAvailabilityLabel(selectedQueue, membership)}</span>
     <span class="meta-chip">정원 ${filled} / ${mainSlots.length}</span>
     <span class="meta-chip">막판 ${lastCallCount}명</span>
-    <span class="meta-chip">마지막 업데이트 ${state.updatedAt || "-"}</span>
+    <span class="meta-chip">마지막 업데이트 ${formatUpdatedAt(state.updatedAt)}</span>
   `;
   slotGrid.innerHTML = "";
   slotGrid.appendChild(buildSlotGrid(mainSlots, selectedQueue, membership, "slot-grid--party"));
