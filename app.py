@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import queue
 import threading
+import time
 from datetime import datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -24,11 +26,14 @@ STATIC_DIR = ROOT / "static"
 DATA_FILE = ROOT / "storage.json"
 LOCK = threading.Lock()
 NOTIFIER_LOCK = threading.Lock()
+NOTIFICATION_WORKER_LOCK = threading.Lock()
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
 DISCORD_CHANNEL_ID = os.environ.get("DISCORD_CHANNEL_ID", "").strip()
 PORT = int(os.environ.get("PORT", "8000"))
 DISCORD_NOTIFIER = None
+NOTIFICATION_QUEUE: queue.Queue[dict[str, object]] = queue.Queue()
+NOTIFICATION_WORKER = None
 
 
 def make_slots(prefix: str, count: int) -> list[dict]:
@@ -169,6 +174,21 @@ def normalize_event_entry(event: dict | str) -> dict:
         "lines": lines,
         "message": message,
     }
+
+
+def parse_retry_after(details: str) -> float | None:
+    if not details:
+        return None
+
+    try:
+        payload = json.loads(details)
+    except json.JSONDecodeError:
+        return None
+
+    retry_after = payload.get("retry_after")
+    if isinstance(retry_after, (int, float)):
+        return max(float(retry_after), 1.0)
+    return None
 
 
 def normalize_state(state: dict) -> dict:
@@ -346,6 +366,8 @@ class DiscordBotNotifier:
     def send(self, message: str) -> bool:
         if self.loop is None or self.client is None:
             return False
+        if not self.ready.wait(timeout=1):
+            return False
 
         try:
             future = asyncio.run_coroutine_threadsafe(self._send(message), self.loop)
@@ -379,23 +401,78 @@ def get_discord_notifier() -> DiscordBotNotifier | None:
         return DISCORD_NOTIFIER
 
 
-def send_discord_notification(message: str) -> None:
+def start_notification_worker() -> None:
+    global NOTIFICATION_WORKER
+
+    if not (DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID) and not DISCORD_WEBHOOK_URL:
+        return
+
+    with NOTIFICATION_WORKER_LOCK:
+        if NOTIFICATION_WORKER and NOTIFICATION_WORKER.is_alive():
+            return
+
+        NOTIFICATION_WORKER = threading.Thread(
+            target=run_notification_worker,
+            name="discord-notification-worker",
+            daemon=True,
+        )
+        NOTIFICATION_WORKER.start()
+
+
+def run_notification_worker() -> None:
+    while True:
+        payload = NOTIFICATION_QUEUE.get()
+        try:
+            message = str(payload.get("message", ""))
+            attempt = int(payload.get("attempt", 1))
+            delivered, retry_after = deliver_discord_notification(message)
+            if delivered:
+                continue
+
+            if retry_after and attempt < 5:
+                print(
+                    f"[discord] rate limited; retrying in {retry_after:.0f}s attempt={attempt + 1} message={message}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                time.sleep(retry_after)
+                NOTIFICATION_QUEUE.put({"message": message, "attempt": attempt + 1})
+                continue
+
+            print(
+                f"[discord] delivery failed permanently attempt={attempt} message={message}",
+                file=sys.stderr,
+                flush=True,
+            )
+        finally:
+            NOTIFICATION_QUEUE.task_done()
+
+
+def deliver_discord_notification(message: str) -> tuple[bool, float | None]:
     notifier = get_discord_notifier()
     if notifier and notifier.send(message):
-        return
+        return True, None
 
     if DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID:
-        send_discord_bot_notification(message)
-        return
+        return send_discord_bot_notification(message)
 
     if DISCORD_WEBHOOK_URL:
-        send_discord_webhook_notification(message)
-        return
+        return send_discord_webhook_notification(message)
 
     print("[discord] notification target not configured", file=sys.stderr, flush=True)
+    return False, None
 
 
-def send_discord_webhook_notification(message: str) -> None:
+def send_discord_notification(message: str) -> None:
+    if not (DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID) and not DISCORD_WEBHOOK_URL:
+        print("[discord] notification target not configured", file=sys.stderr, flush=True)
+        return
+
+    start_notification_worker()
+    NOTIFICATION_QUEUE.put({"message": message, "attempt": 1})
+
+
+def send_discord_webhook_notification(message: str) -> tuple[bool, float | None]:
     body = json.dumps({"content": message}).encode("utf-8")
     request = Request(
         DISCORD_WEBHOOK_URL,
@@ -414,25 +491,26 @@ def send_discord_webhook_notification(message: str) -> None:
     try:
         with urlopen(request, timeout=10) as response:
             print(f"[discord] delivered status={response.status} message={message}", flush=True)
-            return
+            return True, None
     except HTTPError as error:
         details = ""
         try:
             details = error.read().decode("utf-8", errors="replace")
         except Exception:
             details = "<no-body>"
+        retry_after = parse_retry_after(details) if error.code == 429 else None
         print(
             f"[discord] http error status={error.code} message={message} details={details}",
             file=sys.stderr,
             flush=True,
         )
-        return
+        return False, retry_after
     except URLError:
         print(f"[discord] network error message={message}", file=sys.stderr, flush=True)
-        return
+        return False, None
 
 
-def send_discord_bot_notification(message: str) -> None:
+def send_discord_bot_notification(message: str) -> tuple[bool, float | None]:
     body = json.dumps({"content": message}).encode("utf-8")
     request = Request(
         f"https://discord.com/api/v10/channels/{DISCORD_CHANNEL_ID}/messages",
@@ -447,13 +525,14 @@ def send_discord_bot_notification(message: str) -> None:
     try:
         with urlopen(request, timeout=10) as response:
             print(f"[discord-bot] delivered status={response.status} message={message}", flush=True)
-            return
+            return True, None
     except HTTPError as error:
         details = ""
         try:
             details = error.read().decode("utf-8", errors="replace")
         except Exception:
             details = "<no-body>"
+        retry_after = parse_retry_after(details) if error.code == 429 else None
         hint = ""
         if error.code == 403:
             hint = (
@@ -465,10 +544,10 @@ def send_discord_bot_notification(message: str) -> None:
             file=sys.stderr,
             flush=True,
         )
-        return
+        return False, retry_after
     except URLError:
         print(f"[discord-bot] network error message={message}", file=sys.stderr, flush=True)
-        return
+        return False, None
 
 
 def join_queue(payload: dict) -> dict:
@@ -696,6 +775,7 @@ if __name__ == "__main__":
         save_state(build_initial_state())
 
     get_discord_notifier()
+    start_notification_worker()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), PartyHandler)
     print(f"Server running at http://127.0.0.1:{PORT}")
     try:
