@@ -28,9 +28,25 @@ function formatQueueName(queue) {
   return queue.name;
 }
 
+function getMainSlots(queue) {
+  return queue.slots || [];
+}
+
+function getWaitlistSlots(queue) {
+  return queue.waitlist || [];
+}
+
+function countOccupied(slots) {
+  return slots.filter((slot) => slot.occupant).length;
+}
+
+function isWaitSlot(slot) {
+  return slot.id.includes("-wait-");
+}
+
 function getMembership() {
   for (const queue of state.queues) {
-    for (const slot of queue.slots) {
+    for (const slot of [...getMainSlots(queue), ...getWaitlistSlots(queue)]) {
       if (slot.occupant === state.nickname) {
         return { queue, slot };
       }
@@ -39,20 +55,116 @@ function getMembership() {
   return null;
 }
 
+function getAvailabilityLabel(selectedQueue, membership) {
+  if (!membership) return "참석 가능 파티";
+  if (membership.queue.id !== selectedQueue.id) return "다른 파티 참여 중";
+  return isWaitSlot(membership.slot) ? "내가 대기 중인 파티" : "내가 참석 중인 파티";
+}
+
 function renderQueueList() {
   queueList.innerHTML = "";
 
   state.queues.forEach((queue) => {
-    const filled = queue.slots.filter((slot) => slot.occupant).length;
+    const filled = countOccupied(getMainSlots(queue));
+    const waitCount = countOccupied(getWaitlistSlots(queue));
     const button = document.createElement("button");
     button.className = `queue-item${queue.id === state.selectedQueueId ? " active" : ""}`;
-    button.innerHTML = `<strong>${formatQueueName(queue)}</strong><small>${filled} / ${queue.slots.length} 참석</small>`;
+    button.innerHTML = `
+      <strong>${formatQueueName(queue)}</strong>
+      <small>${filled} / ${getMainSlots(queue).length} 참석 · 대기 ${waitCount} / ${getWaitlistSlots(queue).length}</small>
+    `;
     button.addEventListener("click", () => {
       state.selectedQueueId = queue.id;
       render();
     });
     queueList.appendChild(button);
   });
+}
+
+function buildSlotCard(selectedQueue, slot, membership) {
+  const waitSlot = isWaitSlot(slot);
+  const isMine = slot.occupant === state.nickname;
+  const occupiedByOther = Boolean(slot.occupant) && !isMine;
+  const blockedByMembership = Boolean(membership) && !isMine;
+  const statusLabel = waitSlot
+    ? isMine
+      ? "내 대기"
+      : occupiedByOther
+        ? "대기 중"
+        : "대기 가능"
+    : slot.lastCall
+      ? "막판"
+      : isMine
+        ? "내 참석"
+        : occupiedByOther
+          ? "참석 완료"
+          : "비어 있음";
+
+  const card = document.createElement("article");
+  card.className = `slot-card${isMine ? " mine" : ""}${occupiedByOther ? " full" : ""}${slot.lastCall ? " last-call" : ""}${waitSlot ? " waiting-slot" : ""}`;
+
+  const primaryButton = document.createElement("button");
+  primaryButton.className = `slot-button${isMine ? " leave-button" : ""}`;
+  primaryButton.textContent = isMine ? (waitSlot ? "대기 취소" : "파티 제외") : waitSlot ? "대기 등록" : "참석";
+  primaryButton.disabled = occupiedByOther || blockedByMembership || !state.nickname;
+  primaryButton.addEventListener("click", async () => {
+    if (isMine) {
+      await leaveQueue();
+      return;
+    }
+    await joinQueue(selectedQueue.id, slot.id);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "slot-actions";
+  actions.appendChild(primaryButton);
+
+  if (slot.occupant && state.nickname && !isMine) {
+    const removeButton = document.createElement("button");
+    removeButton.className = "remove-button";
+    removeButton.textContent = waitSlot ? "대기 제외" : "파티 제외";
+    removeButton.addEventListener("click", async () => {
+      await removeQueueMember(slot.occupant, waitSlot);
+    });
+    actions.appendChild(removeButton);
+  }
+
+  if (isMine && !waitSlot) {
+    const lastCallButton = document.createElement("button");
+    lastCallButton.className = `last-call-button${slot.lastCall ? " active" : ""}`;
+    lastCallButton.textContent = slot.lastCall ? "막판 해제" : "막판";
+    lastCallButton.addEventListener("click", async () => {
+      await updateLastCall(!slot.lastCall);
+    });
+    actions.appendChild(lastCallButton);
+  }
+
+  const name = slot.occupant || "비어 있음";
+  card.innerHTML = `<span class="slot-status">${statusLabel}</span><h3>${slot.label}</h3><p>${name}</p>`;
+  card.appendChild(actions);
+  return card;
+}
+
+function buildSlotSection(title, slots, selectedQueue, membership, extraClass = "") {
+  const section = document.createElement("section");
+  section.className = "slot-section";
+
+  const header = document.createElement("div");
+  header.className = "slot-section__header";
+  header.innerHTML = `
+    <h3 class="slot-section__title">${title}</h3>
+    <span class="slot-section__meta">${countOccupied(slots)} / ${slots.length}명</span>
+  `;
+
+  const grid = document.createElement("div");
+  grid.className = `slot-grid ${extraClass} slot-grid--count-${slots.length}`.trim();
+  slots.forEach((slot) => {
+    grid.appendChild(buildSlotCard(selectedQueue, slot, membership));
+  });
+
+  section.appendChild(header);
+  section.appendChild(grid);
+  return section;
 }
 
 function renderQueuePanel() {
@@ -67,55 +179,19 @@ function renderQueuePanel() {
   }
 
   queueTitle.textContent = formatQueueName(selectedQueue);
-  const filled = selectedQueue.slots.filter((slot) => slot.occupant).length;
-  const lastCallCount = selectedQueue.slots.filter((slot) => slot.lastCall).length;
+  const mainSlots = getMainSlots(selectedQueue);
+  const waitlistSlots = getWaitlistSlots(selectedQueue);
+  const filled = countOccupied(mainSlots);
+  const lastCallCount = mainSlots.filter((slot) => slot.lastCall).length;
   queueMeta.innerHTML = `
-    <span class="meta-chip">${membership && membership.queue.id === selectedQueue.id ? "내가 참석 중인 파티" : "참석 가능 파티"}</span>
-    <span class="meta-chip">정원 ${filled} / ${selectedQueue.slots.length}</span>
+    <span class="meta-chip">${getAvailabilityLabel(selectedQueue, membership)}</span>
+    <span class="meta-chip">정원 ${filled} / ${mainSlots.length}</span>
     <span class="meta-chip">막판 ${lastCallCount}명</span>
     <span class="meta-chip">마지막 업데이트 ${state.updatedAt || "-"}</span>
   `;
   slotGrid.innerHTML = "";
-
-  selectedQueue.slots.forEach((slot) => {
-    const isMine = slot.occupant === state.nickname;
-    const occupiedByOther = Boolean(slot.occupant) && !isMine;
-    const blockedByMembership = Boolean(membership) && !isMine;
-    const statusLabel = slot.lastCall ? "막판" : isMine ? "내 참석" : occupiedByOther ? "참석 완료" : "비어 있음";
-    const card = document.createElement("article");
-    card.className = `slot-card${isMine ? " mine" : ""}${occupiedByOther ? " full" : ""}${slot.lastCall ? " last-call" : ""}`;
-
-    const button = document.createElement("button");
-    button.className = `slot-button${isMine ? " leave-button" : ""}`;
-    button.textContent = isMine ? "파티 제외" : "참석";
-    button.disabled = occupiedByOther || blockedByMembership || !state.nickname;
-    button.addEventListener("click", async () => {
-      if (isMine) {
-        await leaveQueue();
-        return;
-      }
-      await joinQueue(selectedQueue.id, slot.id);
-    });
-
-    const actions = document.createElement("div");
-    actions.className = "slot-actions";
-    actions.appendChild(button);
-
-    if (isMine) {
-      const lastCallButton = document.createElement("button");
-      lastCallButton.className = `last-call-button${slot.lastCall ? " active" : ""}`;
-      lastCallButton.textContent = slot.lastCall ? "막판 해제" : "막판";
-      lastCallButton.addEventListener("click", async () => {
-        await updateLastCall(!slot.lastCall);
-      });
-      actions.appendChild(lastCallButton);
-    }
-
-    const name = slot.occupant || "비어 있음";
-    card.innerHTML = `<span class="slot-status">${statusLabel}</span><h3>${slot.label}</h3><p>${name}</p>`;
-    card.appendChild(actions);
-    slotGrid.appendChild(card);
-  });
+  slotGrid.appendChild(buildSlotSection("참석 인원", mainSlots, selectedQueue, membership, "slot-grid--party"));
+  slotGrid.appendChild(buildSlotSection("대기열", waitlistSlots, selectedQueue, membership, "slot-grid--waitlist"));
 }
 
 function renderEvents() {
@@ -186,6 +262,38 @@ async function leaveQueue() {
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "파티 제외에 실패했습니다.");
+    }
+    state.queues = data.queues;
+    state.events = data.events || [];
+    state.updatedAt = data.updatedAt;
+    render();
+  } catch (error) {
+    flash(error.message);
+  }
+}
+
+async function removeQueueMember(targetNickname, waitSlot) {
+  if (!state.nickname) {
+    flash("닉네임을 먼저 입력해주세요.");
+    return;
+  }
+
+  const prompt = waitSlot
+    ? `${targetNickname}님을 대기열에서 제외할까요?`
+    : `${targetNickname}님을 파티에서 제외할까요?`;
+  if (!window.confirm(prompt)) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname: state.nickname, targetNickname }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "파티 제외 처리에 실패했습니다.");
     }
     state.queues = data.queues;
     state.events = data.events || [];

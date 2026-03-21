@@ -170,7 +170,7 @@ input {
 .layout {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr) 320px;
-  align-items: stretch;
+  align-items: start;
   gap: 18px;
   margin-top: 18px;
 }
@@ -262,25 +262,61 @@ input {
   font-size: 0.9rem;
 }
 
+.slot-board {
+  display: grid;
+  gap: 24px;
+  margin-top: 20px;
+}
+
+.slot-section {
+  display: grid;
+  gap: 12px;
+}
+
+.slot-section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.slot-section__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.slot-section__meta {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 .slot-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
-  margin-top: 20px;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 6px;
+  align-content: start;
+  overflow: visible;
+}
+
+.slot-grid--waitlist {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .slot-card {
   display: flex;
   flex-direction: column;
+  min-height: 208px;
   padding: 16px;
   border-radius: 18px;
   border: 1px solid var(--border);
   background: var(--surface-alt);
   box-shadow: var(--shadow-sm);
+}
+
+.slot-card.waiting-slot {
+  min-height: 186px;
+  background: #f5f8fc;
 }
 
 .slot-card h3 {
@@ -336,11 +372,17 @@ input {
   color: #c56a15;
 }
 
+.slot-card.waiting-slot .slot-status {
+  background: rgba(24, 103, 192, 0.12);
+  color: var(--accent);
+}
+
 .primary-button,
 .secondary-button,
 .danger-button,
 .slot-button,
-.last-call-button {
+.last-call-button,
+.remove-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -388,6 +430,13 @@ input {
   background: #fff;
   border: 1px solid rgba(237, 137, 54, 0.34);
   color: #c56a15;
+  font-weight: 700;
+}
+
+.remove-button {
+  background: #fff;
+  border: 1px solid rgba(198, 40, 40, 0.22);
+  color: var(--danger);
   font-weight: 700;
 }
 
@@ -510,6 +559,20 @@ dialog::backdrop {
   .hero-card__chips {
     justify-content: flex-start;
     min-width: 0;
+  }
+}
+
+@media (min-width: 1280px) {
+  .slot-grid--count-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .slot-grid--count-8 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .slot-grid--waitlist.slot-grid--count-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

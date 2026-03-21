@@ -25,6 +25,10 @@ def make_slots(prefix: str, count: int) -> list[dict]:
     return [{"id": f"{prefix}-{index}", "label": f"{index}번", "occupant": None, "lastCall": False} for index in range(1, count + 1)]
 
 
+def make_wait_slots(prefix: str, count: int = 2) -> list[dict]:
+    return [{"id": f"{prefix}-wait-{index}", "label": f"대기 {index}", "occupant": None, "lastCall": False} for index in range(1, count + 1)]
+
+
 def make_role_slots(prefix: str) -> list[dict]:
     roles = [
         ("top", "탑"),
@@ -51,17 +55,26 @@ def make_double_up_slots(prefix: str) -> list[dict]:
     return slots
 
 
+def make_queue(queue_id: str, name: str, slots: list[dict]) -> dict:
+    return {
+        "id": queue_id,
+        "name": name,
+        "slots": slots,
+        "waitlist": make_wait_slots(queue_id),
+    }
+
+
 def build_initial_state() -> dict:
     queues = [
-        {"id": "aram-normal-1", "name": "칼바람 일반 1", "slots": make_slots("aram-normal-1", 5)},
-        {"id": "aram-normal-2", "name": "칼바람 일반 2", "slots": make_slots("aram-normal-2", 5)},
-        {"id": "aram-augment-1", "name": "칼바람 증강 1", "slots": make_slots("aram-augment-1", 5)},
-        {"id": "aram-augment-2", "name": "칼바람 증강 2", "slots": make_slots("aram-augment-2", 5)},
-        {"id": "rift-normal-1", "name": "협곡 일반 1", "slots": make_role_slots("rift-normal-1")},
-        {"id": "rift-normal-2", "name": "협곡 일반 2", "slots": make_role_slots("rift-normal-2")},
-        {"id": "rift-flex", "name": "협곡 자랭", "slots": make_role_slots("rift-flex")},
-        {"id": "tft-normal", "name": "롤체 일반", "slots": make_slots("tft-normal", 8)},
-        {"id": "tft-double-up", "name": "롤체 더블업", "slots": make_double_up_slots("tft-double-up")},
+        make_queue("aram-normal-1", "칼바람 일반 1", make_slots("aram-normal-1", 5)),
+        make_queue("aram-normal-2", "칼바람 일반 2", make_slots("aram-normal-2", 5)),
+        make_queue("aram-augment-1", "칼바람 증강 1", make_slots("aram-augment-1", 5)),
+        make_queue("aram-augment-2", "칼바람 증강 2", make_slots("aram-augment-2", 5)),
+        make_queue("rift-normal-1", "협곡 일반 1", make_role_slots("rift-normal-1")),
+        make_queue("rift-normal-2", "협곡 일반 2", make_role_slots("rift-normal-2")),
+        make_queue("rift-flex", "협곡 자랭", make_role_slots("rift-flex")),
+        make_queue("tft-normal", "롤체 일반", make_slots("tft-normal", 8)),
+        make_queue("tft-double-up", "롤체 더블업", make_double_up_slots("tft-double-up")),
     ]
     return {
         "queues": queues,
@@ -102,15 +115,26 @@ def save_state(state: dict) -> None:
 
 def find_membership(state: dict, nickname: str) -> tuple[dict | None, dict | None]:
     for queue in state["queues"]:
-        for slot in queue["slots"]:
+        for slot in iter_queue_slots(queue):
             if slot["occupant"] == nickname:
                 return queue, slot
     return None, None
 
 
+def iter_queue_slots(queue: dict) -> list[dict]:
+    return [*queue.get("slots", []), *queue.get("waitlist", [])]
+
+
+def is_wait_slot(slot: dict) -> bool:
+    return "-wait-" in slot["id"]
+
+
 def normalize_state(state: dict) -> dict:
     for queue in state.get("queues", []):
         for slot in queue.get("slots", []):
+            slot.setdefault("lastCall", False)
+        queue.setdefault("waitlist", make_wait_slots(queue["id"]))
+        for slot in queue.get("waitlist", []):
             slot.setdefault("lastCall", False)
     state.setdefault("events", [])
     return state
@@ -124,7 +148,7 @@ def get_queue(state: dict, queue_id: str) -> dict:
 
 
 def get_slot(queue: dict, slot_id: str) -> dict:
-    for slot in queue["slots"]:
+    for slot in iter_queue_slots(queue):
         if slot["id"] == slot_id:
             return slot
     raise ValueError("존재하지 않는 자리입니다.")
@@ -160,6 +184,19 @@ def build_discord_message(title: str, icon: str, nickname: str, queue: dict, slo
     lines = [
         f"{icon} **{title}**",
         f"> 닉네임: **{nickname}**",
+        f"> 파티: **{format_queue_name(queue)}**",
+        f"> 자리: **{slot['label']}**",
+        f"> 상태: {status_text}",
+        f"> 시간: `{datetime.now().strftime('%H:%M:%S')}`",
+    ]
+    return "\n".join(lines)
+
+
+def build_actor_discord_message(title: str, icon: str, actor_nickname: str, target_nickname: str, queue: dict, slot: dict, status_text: str) -> str:
+    lines = [
+        f"{icon} **{title}**",
+        f"> 대상: **{target_nickname}**",
+        f"> 처리자: **{actor_nickname}**",
         f"> 파티: **{format_queue_name(queue)}**",
         f"> 자리: **{slot['label']}**",
         f"> 상태: {status_text}",
@@ -228,8 +265,12 @@ def join_queue(payload: dict) -> dict:
 
         slot["occupant"] = nickname
         slot["lastCall"] = False
-        message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에 참석했습니다.")
-        discord_message = build_discord_message("파티 참석", "✅", nickname, queue, slot, "참석 완료")
+        if is_wait_slot(slot):
+            message = f"{nickname}님이 {queue['name']} - {slot['label']}에 등록되었습니다."
+            discord_message = build_discord_message("대기 등록", "🕒", nickname, queue, slot, "대기열 등록 완료")
+        else:
+            message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에 참석했습니다.")
+            discord_message = build_discord_message("파티 참석", "✅", nickname, queue, slot, "참석 완료")
         append_event(state, message)
         save_state(state)
 
@@ -246,9 +287,14 @@ def leave_queue(payload: dict) -> dict:
         if not slot:
             raise ValueError("참석 중인 파티가 없습니다.")
 
-        status_text = "막판 상태에서 파티 제외" if slot.get("lastCall") else "파티 제외"
-        message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에서 파티 제외되었습니다.")
-        discord_message = build_discord_message("파티 제외", "↩️", nickname, queue, slot, status_text)
+        if is_wait_slot(slot):
+            status_text = "대기열에서 제거됨"
+            message = f"{nickname}님이 {queue['name']} - {slot['label']}에서 대기 취소되었습니다."
+            discord_message = build_discord_message("대기 취소", "↩️", nickname, queue, slot, status_text)
+        else:
+            status_text = "막판 상태에서 파티 제외" if slot.get("lastCall") else "파티 제외"
+            message = format_prefixed_message(slot, f"{nickname}님이 {queue['name']} - {slot['label']}에서 파티 제외되었습니다.")
+            discord_message = build_discord_message("파티 제외", "↩️", nickname, queue, slot, status_text)
         slot["occupant"] = None
         slot["lastCall"] = False
         append_event(state, message)
@@ -267,6 +313,8 @@ def update_last_call(payload: dict) -> dict:
         queue, slot = find_membership(state, nickname)
         if not slot:
             raise ValueError("참석 중인 자리에서만 막판 설정이 가능합니다.")
+        if is_wait_slot(slot):
+            raise ValueError("대기열에서는 막판 설정을 사용할 수 없습니다.")
 
         slot["lastCall"] = enabled
         if enabled:
@@ -275,6 +323,60 @@ def update_last_call(payload: dict) -> dict:
         else:
             message = f"[막판 해제] {nickname}님이 {queue['name']} - {slot['label']}에서 막판을 해제했습니다."
             discord_message = build_discord_message("막판 해제", "🧊", nickname, queue, slot, "막판 상태를 해제했어요")
+        append_event(state, message)
+        save_state(state)
+
+    send_discord_notification(discord_message)
+    return state
+
+
+def remove_queue_member(payload: dict) -> dict:
+    actor_nickname = normalize_nickname(payload.get("nickname", ""))
+    target_nickname = normalize_nickname(payload.get("targetNickname", ""))
+
+    with LOCK:
+        state = load_state()
+        queue, slot = find_membership(state, target_nickname)
+        if not slot:
+            raise ValueError("해당 닉네임은 현재 파티나 대기열에 없습니다.")
+
+        if actor_nickname == target_nickname:
+            if is_wait_slot(slot):
+                message = f"{target_nickname}님이 {queue['name']} - {slot['label']}에서 대기 취소되었습니다."
+                discord_message = build_discord_message("대기 취소", "↩️", target_nickname, queue, slot, "대기열에서 제거됨")
+            else:
+                status_text = "막판 상태에서 파티 제외" if slot.get("lastCall") else "파티 제외"
+                message = format_prefixed_message(slot, f"{target_nickname}님이 {queue['name']} - {slot['label']}에서 파티 제외되었습니다.")
+                discord_message = build_discord_message("파티 제외", "↩️", target_nickname, queue, slot, status_text)
+        else:
+            if is_wait_slot(slot):
+                message = f"{actor_nickname}님이 {target_nickname}님을 {queue['name']} - {slot['label']}에서 대기 취소시켰습니다."
+                discord_message = build_actor_discord_message(
+                    "대기 취소 처리",
+                    "🧹",
+                    actor_nickname,
+                    target_nickname,
+                    queue,
+                    slot,
+                    "다른 사용자가 대기열에서 제거했어요",
+                )
+            else:
+                message = format_prefixed_message(slot, f"{actor_nickname}님이 {target_nickname}님을 {queue['name']} - {slot['label']}에서 파티 제외시켰습니다.")
+                status_text = "다른 사용자가 파티에서 제외했어요"
+                if slot.get("lastCall"):
+                    status_text = "막판 상태에서 다른 사용자가 파티에서 제외했어요"
+                discord_message = build_actor_discord_message(
+                    "파티 제외 처리",
+                    "🧹",
+                    actor_nickname,
+                    target_nickname,
+                    queue,
+                    slot,
+                    status_text,
+                )
+
+        slot["occupant"] = None
+        slot["lastCall"] = False
         append_event(state, message)
         save_state(state)
 
@@ -300,7 +402,7 @@ class PartyHandler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self) -> None:
-        if self.path not in {"/api/join", "/api/leave", "/api/last-call"}:
+        if self.path not in {"/api/join", "/api/leave", "/api/last-call", "/api/remove"}:
             self.respond_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
             return
 
@@ -313,6 +415,8 @@ class PartyHandler(SimpleHTTPRequestHandler):
                 state = join_queue(payload)
             elif self.path == "/api/last-call":
                 state = update_last_call(payload)
+            elif self.path == "/api/remove":
+                state = remove_queue_member(payload)
             else:
                 state = leave_queue(payload)
         except ValueError as error:
