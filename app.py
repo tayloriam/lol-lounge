@@ -18,6 +18,8 @@ STATIC_DIR = ROOT / "static"
 DATA_FILE = ROOT / "storage.json"
 LOCK = threading.Lock()
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+DISCORD_CHANNEL_ID = os.environ.get("DISCORD_CHANNEL_ID", "").strip()
 PORT = int(os.environ.get("PORT", "8000"))
 
 
@@ -206,10 +208,18 @@ def build_actor_discord_message(title: str, icon: str, actor_nickname: str, targ
 
 
 def send_discord_notification(message: str) -> None:
-    if not DISCORD_WEBHOOK_URL:
-        print("[discord] webhook url not configured", file=sys.stderr, flush=True)
+    if DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID:
+        send_discord_bot_notification(message)
         return
 
+    if DISCORD_WEBHOOK_URL:
+        send_discord_webhook_notification(message)
+        return
+
+    print("[discord] notification target not configured", file=sys.stderr, flush=True)
+
+
+def send_discord_webhook_notification(message: str) -> None:
     body = json.dumps({"content": message}).encode("utf-8")
     request = Request(
         DISCORD_WEBHOOK_URL,
@@ -243,6 +253,44 @@ def send_discord_notification(message: str) -> None:
         return
     except URLError:
         print(f"[discord] network error message={message}", file=sys.stderr, flush=True)
+        return
+
+
+def send_discord_bot_notification(message: str) -> None:
+    body = json.dumps({"content": message}).encode("utf-8")
+    request = Request(
+        f"https://discord.com/api/v10/channels/{DISCORD_CHANNEL_ID}/messages",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/123.0.0.0 Safari/537.36"
+            ),
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            print(f"[discord-bot] delivered status={response.status} message={message}", flush=True)
+            return
+    except HTTPError as error:
+        details = ""
+        try:
+            details = error.read().decode("utf-8", errors="replace")
+        except Exception:
+            details = "<no-body>"
+        print(
+            f"[discord-bot] http error status={error.code} message={message} details={details}",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+    except URLError:
+        print(f"[discord-bot] network error message={message}", file=sys.stderr, flush=True)
         return
 
 

@@ -10,3 +10,7 @@ services:
         value: 3.14.3
       - key: DISCORD_WEBHOOK_URL
         sync: false
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: DISCORD_CHANNEL_ID
+        sync: false
