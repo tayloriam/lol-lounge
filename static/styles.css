@@ -15,7 +15,7 @@
   --danger-soft: #fdeeee;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.08);
-  --panel-height: calc(100vh - 290px);
+  --panel-height: max(920px, calc(100vh - 290px));
 }
 
 * {
@@ -170,7 +170,7 @@ input {
 .layout {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr) 320px;
-  align-items: start;
+  align-items: stretch;
   gap: 18px;
   margin-top: 18px;
 }
@@ -186,7 +186,7 @@ input {
   box-shadow: var(--shadow-md);
   padding: 22px;
   min-height: var(--panel-height);
-  height: auto;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -266,6 +266,8 @@ input {
   display: grid;
   gap: 22px;
   margin-top: 24px;
+  min-height: 760px;
+  align-content: start;
 }
 
 .slot-section {
@@ -483,6 +485,8 @@ button:not(:disabled):hover {
   margin-top: 16px;
   flex: 1 1 auto;
   min-height: 0;
+  align-content: start;
+  grid-auto-rows: max-content;
   overflow: auto;
   padding-right: 6px;
 }
@@ -599,6 +603,7 @@ dialog::backdrop {
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .queue-nav,
@@ -620,6 +625,10 @@ dialog::backdrop {
   .slot-grid--party,
   .slot-grid--waitlist {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .slot-board {
+    min-height: 0;
   }
 }
 

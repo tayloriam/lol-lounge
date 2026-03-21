@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
@@ -12,15 +13,22 @@ from urllib.error import HTTPError
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+try:
+    import discord
+except ImportError:  # pragma: no cover - Render installs this from requirements.txt
+    discord = None
+
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 DATA_FILE = ROOT / "storage.json"
 LOCK = threading.Lock()
+NOTIFIER_LOCK = threading.Lock()
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
 DISCORD_CHANNEL_ID = os.environ.get("DISCORD_CHANNEL_ID", "").strip()
 PORT = int(os.environ.get("PORT", "8000"))
+DISCORD_NOTIFIER = None
 
 
 def make_slots(prefix: str, count: int) -> list[dict]:
@@ -278,7 +286,104 @@ def build_event_entry(
     }
 
 
+class DiscordBotNotifier:
+    def __init__(self, token: str, channel_id: str) -> None:
+        self.token = token
+        self.channel_id = int(channel_id)
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self.thread: threading.Thread | None = None
+        self.client = None
+        self.ready = threading.Event()
+
+    def start(self) -> None:
+        if discord is None:
+            print("[discord-bot] discord.py is not installed", file=sys.stderr, flush=True)
+            return
+
+        if self.thread and self.thread.is_alive():
+            return
+
+        self.thread = threading.Thread(target=self._run, name="discord-bot-notifier", daemon=True)
+        self.thread.start()
+
+    def _run(self) -> None:
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+
+        intents = discord.Intents.none()
+        self.client = discord.Client(intents=intents)
+
+        @self.client.event
+        async def on_ready() -> None:
+            user = getattr(self.client, "user", None)
+            print(f"[discord-bot] connected as {user}", flush=True)
+            self.ready.set()
+
+        @self.client.event
+        async def on_disconnect() -> None:
+            self.ready.clear()
+            print("[discord-bot] disconnected", file=sys.stderr, flush=True)
+
+        async def runner() -> None:
+            try:
+                await self.client.start(self.token)
+            except Exception as error:
+                self.ready.clear()
+                print(f"[discord-bot] failed to start: {error}", file=sys.stderr, flush=True)
+
+        self.loop.run_until_complete(runner())
+
+    async def _send(self, message: str) -> None:
+        if self.client is None:
+            raise RuntimeError("client not initialized")
+
+        await self.client.wait_until_ready()
+        channel = self.client.get_channel(self.channel_id)
+        if channel is None:
+            channel = await self.client.fetch_channel(self.channel_id)
+        await channel.send(message)
+
+    def send(self, message: str) -> bool:
+        if self.loop is None or self.client is None:
+            return False
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(self._send(message), self.loop)
+            future.result(timeout=15)
+            print(f"[discord-bot] delivered via gateway message={message}", flush=True)
+            return True
+        except Exception as error:
+            print(f"[discord-bot] gateway send failed message={message} error={error}", file=sys.stderr, flush=True)
+            return False
+
+
+def get_discord_notifier() -> DiscordBotNotifier | None:
+    global DISCORD_NOTIFIER
+
+    if not (DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID):
+        return None
+
+    if discord is None:
+        return None
+
+    try:
+        int(DISCORD_CHANNEL_ID)
+    except ValueError:
+        print("[discord-bot] DISCORD_CHANNEL_ID must be a numeric channel id", file=sys.stderr, flush=True)
+        return None
+
+    with NOTIFIER_LOCK:
+        if DISCORD_NOTIFIER is None:
+            DISCORD_NOTIFIER = DiscordBotNotifier(DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID)
+            DISCORD_NOTIFIER.start()
+        return DISCORD_NOTIFIER
+
+
 def send_discord_notification(message: str) -> None:
+    notifier = get_discord_notifier()
+    if notifier and notifier.send(message):
+        return
+
     if DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID:
         send_discord_bot_notification(message)
         return
@@ -595,6 +700,7 @@ if __name__ == "__main__":
     if not DATA_FILE.exists():
         save_state(build_initial_state())
 
+    get_discord_notifier()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), PartyHandler)
     print(f"Server running at http://127.0.0.1:{PORT}")
     try:
